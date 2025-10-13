@@ -5,6 +5,8 @@ import morgan from "morgan";
 import { connectDB } from "./config/db.js";
 import healthRoutes from "./routes/health.routes.js";
 import { notFound, errorHandler } from "./middlewares/error.js";
+import specialRoutes from "./routes/special.routes.js";
+import recyclableRoutes from "./routes/recyclable.routes.js";
 
 const app = express();
 
@@ -20,6 +22,9 @@ app.use("/api/health", healthRoutes);
 app.get("/", (req, res) => {
   res.send("TrashTrack API is running 🚛♻️");
 });
+
+app.use("/api/special-requests", specialRoutes);
+app.use("/api/recyclables", recyclableRoutes);
 
 // errors
 app.use(notFound);

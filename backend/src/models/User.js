@@ -1,0 +1,18 @@
+import mongoose from "mongoose";
+
+const userSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, unique: true },
+    name:  { type: String, required: true },
+    address: {
+      line1: String,
+      line2: String,
+      city: String,
+      postalCode: String,
+      municipalAreaId: { type: String } // to validate eligibility
+    }
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("User", userSchema);
