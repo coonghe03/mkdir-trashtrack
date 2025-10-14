@@ -8,6 +8,7 @@ import History from "./pages/History";
 import Rewards from "./pages/Rewards";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import Notifications from "./pages/Notifications";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/rewards" element={<Rewards />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Routes>
       </main>
     </BrowserRouter>

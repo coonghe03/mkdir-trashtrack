@@ -6,16 +6,30 @@ const SpecialRequestForm = () => {
   const [description, setDescription] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
   const [msg, setMsg] = useState("");
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setMsg("Submitting...");
+  const validate = () => {
+    const e = {};
+    if (!preferredDate) e.preferredDate = "Preferred date is required";
+    if (!["bulky","ewaste"].includes(type)) e.type = "Invalid type";
+    if (description.length > 500) e.description = "Max 500 characters";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const submit = async (ev) => {
+    ev.preventDefault();
+    if (!validate()) return;
+    setLoading(true); setMsg("Submitting...");
     try {
       const res = await api.post("/api/special-requests", { type, description, preferredDate });
       setMsg(res.message || "Submitted");
+      setDescription("");
+      setPreferredDate("");
     } catch (err) {
       setMsg(err.message);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -23,19 +37,22 @@ const SpecialRequestForm = () => {
       <h1>Special Waste Collection</h1>
       <form onSubmit={submit} style={{ maxWidth: 520 }}>
         <label>Type</label>
-        <select value={type} onChange={(e) => setType(e.target.value)}>
+        <select value={type} onChange={(e) => setType(e.target.value)} disabled={loading}>
           <option value="bulky">Bulky</option>
           <option value="ewaste">E-Waste</option>
         </select>
+        {errors.type && <div style={{ color: "var(--danger)" }}>{errors.type}</div>}
 
         <label>Preferred Date</label>
-        <input type="date" value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} required />
+        <input type="date" value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} disabled={loading} />
+        {errors.preferredDate && <div style={{ color: "var(--danger)" }}>{errors.preferredDate}</div>}
 
         <label>Description (optional)</label>
-        <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} disabled={loading} />
+        {errors.description && <div style={{ color: "var(--danger)" }}>{errors.description}</div>}
 
         <div style={{ marginTop: 12 }}>
-          <button type="submit">Submit Request</button>
+          <button type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</button>
         </div>
         <p style={{ color: "var(--muted)" }}>{msg}</p>
       </form>

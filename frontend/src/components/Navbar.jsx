@@ -15,6 +15,7 @@ const Navbar = () => {
           <NavLink to="/history">History</NavLink>
           <NavLink to="/rewards">Rewards</NavLink>
           <NavLink to="/profile">Profile</NavLink>
+          <NavLink to="/notifications">Notifications</NavLink>
         </nav>
       </div>
     </header>

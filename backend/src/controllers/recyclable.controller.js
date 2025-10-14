@@ -8,10 +8,13 @@ import {
 import { calculatePayback } from "../utils/payback.js";
 import { sendEmail } from "../utils/email.js";
 import { buildRecyclableReceipt } from "../utils/receipt.js";
+import { pushNotification } from "../utils/notify.js";
+import { streamRecyclableReceiptPdf } from "../utils/pdf.js";
+
 
 /**
  * Validate categories & weights, compute payback, and save.
- * Includes 4A (incorrect category/weight -> validation error).
+ * Covers extension 4A via Joi validation errors.
  */
 export const createRecyclableSubmission = async (req, res, next) => {
   try {
@@ -76,7 +79,7 @@ export const updateRecyclableSubmission = async (req, res, next) => {
 
 /**
  * Mark as completed -> credit payback & generate receipt
- * 10 / 10A extension behavior included
+ * Handles 10/10A (credit failure is logged & user notified)
  */
 export const completeRecyclableSubmission = async (req, res, next) => {
   try {
@@ -111,6 +114,13 @@ export const completeRecyclableSubmission = async (req, res, next) => {
                <p>Total Payback: Rs. ${doc.totalPayback.toFixed(2)}</p>`,
       });
 
+      await pushNotification(req.user._id, {
+        type: "success",
+        title: "Recyclables completed",
+        message: `Receipt ${doc.receiptNo} | Rs. ${doc.totalPayback.toFixed(2)}`,
+        meta: { submissionId: doc._id, receiptNo: doc.receiptNo, total: doc.totalPayback }
+      });
+
       return res.json({
         message: "Submission completed. Payback credited.",
         data: { submission: doc, payback: pay, receipt },
@@ -132,6 +142,13 @@ export const completeRecyclableSubmission = async (req, res, next) => {
                <p>Receipt: <strong>${doc.receiptNo}</strong></p>`,
       });
 
+      await pushNotification(req.user._id, {
+        type: "error",
+        title: "Payback credit failed",
+        message: `Receipt ${doc.receiptNo} logged; retry pending.`,
+        meta: { submissionId: doc._id, receiptNo: doc.receiptNo }
+      });
+
       return res.status(502).json({
         message: "Submission closed but credit failed (logged).",
         data: { submission: doc, payback: pay, receipt },
@@ -141,3 +158,33 @@ export const completeRecyclableSubmission = async (req, res, next) => {
     return next(e);
   }
 };
+
+/** Downloadable JSON receipt (only after completion) */
+export const getRecyclableReceipt = async (req, res, next) => {
+  try {
+    const doc = await RecyclableSubmission.findOne({ _id: req.params.id, resident: req.user._id });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    if (doc.status !== "completed") {
+      return res.status(409).json({ message: "Receipt available only after completion" });
+    }
+    const receipt = buildRecyclableReceipt(doc);
+    return res.json({ data: receipt });
+  } catch (e) {
+    return next(e);
+  }
+};
+
+export const getRecyclableReceiptPdf = async (req, res, next) => {
+  try {
+    const doc = await RecyclableSubmission.findOne({ _id: req.params.id, resident: req.user._id });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    if (doc.status !== "completed") {
+      return res.status(409).json({ message: "Receipt available only after completion" });
+    }
+    // stream a PDF to the response
+    streamRecyclableReceiptPdf({ res, submission: doc, user: req.user });
+  } catch (e) {
+    next(e);
+  }
+};
+

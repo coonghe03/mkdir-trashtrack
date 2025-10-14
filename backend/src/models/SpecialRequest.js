@@ -4,11 +4,15 @@ import { REQUEST_STATUS, SPECIAL_TYPES } from "../utils/constants.js";
 const specialRequestSchema = new mongoose.Schema(
   {
     resident: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    type: { type: String, enum: SPECIAL_TYPES, required: true },           // bulky or ewaste
-    description: { type: String },                                         // optional
+    type: { type: String, enum: SPECIAL_TYPES, required: true },
+    description: { type: String },
     preferredDate: { type: Date, required: true },
-    scheduledDate: { type: Date },                                         // resolved date after conflict handling
-    status: { type: String, enum: REQUEST_STATUS, default: "pending" }
+    scheduledDate: { type: Date }, // final date used for routing
+    status: { type: String, enum: REQUEST_STATUS, default: "pending" },
+
+    // NEW: admin/ops visibility
+    alternatives: [{ type: Date }],     // proposed alternative dates if preferred was full
+    conflictNote: { type: String }      // “capacity full”, “truck unavailable”, etc.
   },
   { timestamps: true }
 );

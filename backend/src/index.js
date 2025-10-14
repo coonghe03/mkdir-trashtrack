@@ -7,6 +7,7 @@ import healthRoutes from "./routes/health.routes.js";
 import { notFound, errorHandler } from "./middlewares/error.js";
 import specialRoutes from "./routes/special.routes.js";
 import recyclableRoutes from "./routes/recyclable.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
 
 const app = express();
 
@@ -25,6 +26,8 @@ app.get("/", (req, res) => {
 
 app.use("/api/special-requests", specialRoutes);
 app.use("/api/recyclables", recyclableRoutes);
+app.use("/api/notifications", notificationRoutes);
+
 
 // errors
 app.use(notFound);
