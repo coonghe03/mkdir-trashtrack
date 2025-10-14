@@ -1,7 +1,13 @@
+// backend/src/controllers/recyclable.controller.js
 import RecyclableSubmission from "../models/RecyclableSubmission.js";
 import Payback from "../models/Payback.js";
-import { createRecyclableSubmissionSchema, updateRecyclableSubmissionSchema } from "../validators/recyclable.schema.js";
+import {
+  createRecyclableSubmissionSchema,
+  updateRecyclableSubmissionSchema,
+} from "../validators/recyclable.schema.js";
 import { calculatePayback } from "../utils/payback.js";
+import { sendEmail } from "../utils/email.js";
+import { buildRecyclableReceipt } from "../utils/receipt.js";
 
 /**
  * Validate categories & weights, compute payback, and save.
@@ -12,26 +18,29 @@ export const createRecyclableSubmission = async (req, res, next) => {
     const { error, value } = createRecyclableSubmissionSchema.validate(req.body, { abortEarly: false });
     if (error) return res.status(400).json({ errors: error.details });
 
-    const total = value.items.reduce((sum, item) => sum + calculatePayback(item.category, item.weightKG), 0);
+    const total = value.items.reduce(
+      (sum, item) => sum + calculatePayback(item.category, item.weightKG),
+      0
+    );
 
     const doc = await RecyclableSubmission.create({
       resident: req.user._id,
       items: value.items,
-      totalPayback: total
+      totalPayback: total,
     });
 
-    res.status(201).json({ message: "Submission received", data: doc });
+    return res.status(201).json({ message: "Submission received", data: doc });
   } catch (e) {
-    next(e);
+    return next(e);
   }
 };
 
 export const listRecyclableSubmissions = async (req, res, next) => {
   try {
     const docs = await RecyclableSubmission.find({ resident: req.user._id }).sort({ createdAt: -1 });
-    res.json({ data: docs });
+    return res.json({ data: docs });
   } catch (e) {
-    next(e);
+    return next(e);
   }
 };
 
@@ -45,19 +54,23 @@ export const updateRecyclableSubmission = async (req, res, next) => {
 
     const doc = await RecyclableSubmission.findOne({ _id: req.params.id, resident: req.user._id });
     if (!doc) return res.status(404).json({ message: "Not found" });
-    if (!["submitted", "processing"].includes(doc.status))
+    if (!["submitted", "processing"].includes(doc.status)) {
       return res.status(409).json({ message: "Only submitted/processing items can be updated/canceled" });
+    }
 
     if (value.items) {
       doc.items = value.items;
-      doc.totalPayback = value.items.reduce((sum, i) => sum + calculatePayback(i.category, i.weightKG), 0);
+      doc.totalPayback = value.items.reduce(
+        (sum, i) => sum + calculatePayback(i.category, i.weightKG),
+        0
+      );
     }
     if (value.status === "canceled") doc.status = "canceled";
 
     await doc.save();
-    res.json({ message: "Submission updated", data: doc });
+    return res.json({ message: "Submission updated", data: doc });
   } catch (e) {
-    next(e);
+    return next(e);
   }
 };
 
@@ -69,36 +82,62 @@ export const completeRecyclableSubmission = async (req, res, next) => {
   try {
     const doc = await RecyclableSubmission.findOne({ _id: req.params.id, resident: req.user._id });
     if (!doc) return res.status(404).json({ message: "Not found" });
-    if (doc.status === "completed") return res.status(409).json({ message: "Already completed" });
+    if (doc.status === "completed") {
+      return res.status(409).json({ message: "Already completed" });
+    }
 
-    // generate simple receipt no
+    // finalize submission
     doc.status = "completed";
     doc.receiptNo = `RCPT-${Date.now()}`;
     await doc.save();
 
-    // credit payback; simulate possible failure
+    const receipt = buildRecyclableReceipt(doc);
+
+    // Try to credit payback
     try {
       const pay = await Payback.create({
         resident: req.user._id,
         submission: doc._id,
         amount: doc.totalPayback,
         reason: "Recyclable payback",
-        status: "credited"
+        status: "credited",
       });
-      return res.json({ message: "Submission completed. Payback credited.", data: { submission: doc, payback: pay } });
+
+      await sendEmail({
+        to: req.user.email,
+        subject: `Recyclable Receipt ${doc.receiptNo}`,
+        html: `<h3>Thank you for recycling!</h3>
+               <p>Receipt: <strong>${doc.receiptNo}</strong></p>
+               <p>Total Payback: Rs. ${doc.totalPayback.toFixed(2)}</p>`,
+      });
+
+      return res.json({
+        message: "Submission completed. Payback credited.",
+        data: { submission: doc, payback: pay, receipt },
+      });
     } catch (creditErr) {
-      // 10A: log and notify failure
       const pay = await Payback.create({
         resident: req.user._id,
         submission: doc._id,
         amount: doc.totalPayback,
         reason: "Recyclable payback",
         status: "failed",
-        error: creditErr.message
+        error: creditErr.message,
       });
-      return res.status(502).json({ message: "Submission closed but credit failed (logged).", data: { submission: doc, payback: pay } });
+
+      await sendEmail({
+        to: req.user.email,
+        subject: `Recyclable Receipt (credit failed) ${doc.receiptNo}`,
+        html: `<p>Your submission was completed but crediting failed. Our team has been notified.</p>
+               <p>Receipt: <strong>${doc.receiptNo}</strong></p>`,
+      });
+
+      return res.status(502).json({
+        message: "Submission closed but credit failed (logged).",
+        data: { submission: doc, payback: pay, receipt },
+      });
     }
   } catch (e) {
-    next(e);
+    return next(e);
   }
 };

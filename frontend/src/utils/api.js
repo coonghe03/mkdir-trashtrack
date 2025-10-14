@@ -11,6 +11,17 @@ export const api = {
       credentials: "include",
       body: JSON.stringify(body)
     });
+    if (!res.ok) {
+      const t = await res.text().catch(()=>"");
+      throw new Error(`POST ${path} failed (${res.status}) ${t}`);
+    }
+    return res.json();
+  },
+  postNoBody: async (path) => {
+    const res = await fetch(path, {
+      method: "POST",
+      credentials: "include"
+    });
     if (!res.ok) throw new Error(`POST ${path} failed (${res.status})`);
     return res.json();
   },
@@ -22,6 +33,11 @@ export const api = {
       body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error(`PATCH ${path} failed (${res.status})`);
+    return res.json();
+  },
+  del: async (path) => {
+    const res = await fetch(path, { method: "DELETE", credentials: "include" });
+    if (!res.ok) throw new Error(`DELETE ${path} failed (${res.status})`);
     return res.json();
   }
 };

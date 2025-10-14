@@ -1,6 +1,7 @@
 import SpecialRequest from "../models/SpecialRequest.js";
 import { createSpecialRequestSchema, updateSpecialRequestSchema } from "../validators/specialRequest.schema.js";
 import { REQUEST_STATUS } from "../utils/constants.js";
+import { sendEmail } from "../utils/email.js";
 
 /**
  * Naive conflict resolution: no more than N special pickups per day.
@@ -104,4 +105,55 @@ export const updateSpecialRequest = async (req, res, next) => {
   } catch (e) {
     next(e);
   }
+};
+
+const dayWindow = (d) => {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+export const checkAvailability = async (req, res, next) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: "date is required (YYYY-MM-DD)" });
+
+    const base = new Date(date);
+    const suggestions = [];
+    let probe = new Date(base);
+
+    // propose up to 5 dates that still have capacity
+    while (suggestions.length < 5) {
+      const { start, end } = dayWindow(probe);
+      const count = await SpecialRequest.countDocuments({
+        scheduledDate: { $gte: start, $lt: end },
+        status: { $in: ["pending", "scheduled"] },
+      });
+      if (count < MAX_PER_DAY) suggestions.push(start.toISOString().slice(0,10));
+      probe.setDate(probe.getDate() + 1);
+      if (suggestions.length === 10) break; // safety
+    }
+    res.json({ data: suggestions });
+  } catch (e) { next(e); }
+};
+
+export const cancelSpecialRequest = async (req, res, next) => {
+  try {
+    const doc = await SpecialRequest.findOne({ _id: req.params.id, resident: req.user._id });
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    if (!["pending", "scheduled"].includes(doc.status))
+      return res.status(409).json({ message: "Only pending/scheduled can be canceled" });
+
+    doc.status = "canceled";
+    await doc.save();
+
+    // notify
+    await sendEmail({
+      to: req.user.email,
+      subject: "Special Waste Request Canceled",
+      html: `<p>Your request (${doc._id}) has been canceled.</p>`
+    });
+
+    res.json({ message: "Request canceled", data: doc });
+  } catch (e) { next(e); }
 };
