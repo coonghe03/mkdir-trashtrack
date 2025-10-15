@@ -2,19 +2,13 @@ import React, { useEffect, useState } from "react";
 import { api } from "../utils/api";
 
 const formatDate = (d) => {
-  try {
-    return new Date(d).toDateString();
-  } catch {
-    return "-";
-  }
+  try { return new Date(d).toDateString(); } catch { return "-"; }
 };
 
 const History = () => {
   const [special, setSpecial] = useState([]);
   const [recycles, setRecycles] = useState([]);
   const [msg, setMsg] = useState("");
-
-  
 
   const load = async () => {
     try {
@@ -32,10 +26,7 @@ const History = () => {
     }
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { load(); }, []);
 
   // ---- Special Requests actions ----
   const cancelSpecial = async (id) => {
@@ -45,9 +36,7 @@ const History = () => {
       await api.post(`/api/special-requests/${id}/cancel`, {});
       setMsg("Special request canceled.");
       await load();
-    } catch (e) {
-      setMsg(e.message);
-    }
+    } catch (e) { setMsg(e.message); }
   };
 
   const rescheduleSpecial = async (id) => {
@@ -57,16 +46,11 @@ const History = () => {
     try {
       const avail = await api.get(`/api/special-requests/availability?date=${date}`);
       const choice = avail.data?.[0];
-      if (!choice) {
-        setMsg("No available dates found.");
-        return;
-      }
+      if (!choice) { setMsg("No available dates found."); return; }
       await api.patch(`/api/special-requests/${id}`, { preferredDate: choice });
       setMsg(`Rescheduled to ${choice}.`);
       await load();
-    } catch (e) {
-      setMsg(e.message);
-    }
+    } catch (e) { setMsg(e.message); }
   };
 
   // ---- Recyclables actions ----
@@ -77,9 +61,7 @@ const History = () => {
       await api.patch(`/api/recyclables/${id}`, { status: "canceled" });
       setMsg("Submission canceled.");
       await load();
-    } catch (e) {
-      setMsg(e.message);
-    }
+    } catch (e) { setMsg(e.message); }
   };
 
   const completeRecycle = async (id) => {
@@ -89,17 +71,25 @@ const History = () => {
       const r = await api.postNoBody(`/api/recyclables/${id}/complete`);
       setMsg(`${r.message} Receipt: ${r.data?.receipt?.receiptNo || "-"}`);
       await load();
+    } catch (e) { setMsg(e.message); }
+  };
+
+  // NEW: Download PDF using Authorized fetch -> blob
+  const downloadPdf = async (id, filename = "receipt.pdf") => {
+    setMsg("Preparing receipt...");
+    try {
+      const blob = await api.getBlob(`/api/recyclables/${id}/receipt.pdf`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg("Receipt downloaded.");
     } catch (e) {
       setMsg(e.message);
     }
   };
-
-  const API_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-  // PDF download just opens the backend streaming endpoint
-  const openPdf = (id) => {
-  window.open(`${API_BASE}/api/recyclables/${id}/receipt.pdf`, "_blank", "noopener,noreferrer");};
-
 
   return (
     <>
@@ -137,12 +127,8 @@ const History = () => {
                 <div style={{ display: "flex", gap: 8 }}>
                   {["pending", "scheduled"].includes(s.status) && (
                     <>
-                      <button type="button" onClick={() => rescheduleSpecial(s._id)}>
-                        Reschedule
-                      </button>
-                      <button type="button" onClick={() => cancelSpecial(s._id)}>
-                        Cancel
-                      </button>
+                      <button type="button" onClick={() => rescheduleSpecial(s._id)}>Reschedule</button>
+                      <button type="button" onClick={() => cancelSpecial(s._id)}>Cancel</button>
                     </>
                   )}
                 </div>
@@ -162,28 +148,22 @@ const History = () => {
             <li key={x._id} className="card" style={{ padding: 12, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div>
-                    {x.items?.length || 0} items — Rs. {Number(x.totalPayback || 0).toFixed(2)}
-                  </div>
-                  <div>
-                    Status: {x.status}
-                    {x.receiptNo ? ` — ${x.receiptNo}` : ""}
-                  </div>
+                  <div>{x.items?.length || 0} items — Rs. {Number(x.totalPayback || 0).toFixed(2)}</div>
+                  <div> Status: {x.status}{x.receiptNo ? ` — ${x.receiptNo}` : ""}</div>
                 </div>
 
                 <div style={{ display: "flex", gap: 8 }}>
                   {["submitted", "processing"].includes(x.status) && (
                     <>
-                      <button type="button" onClick={() => cancelRecycle(x._id)}>
-                        Cancel
-                      </button>
-                      <button type="button" onClick={() => completeRecycle(x._id)}>
-                        Complete
-                      </button>
+                      <button type="button" onClick={() => cancelRecycle(x._id)}>Cancel</button>
+                      <button type="button" onClick={() => completeRecycle(x._id)}>Complete</button>
                     </>
                   )}
                   {x.status === "completed" && (
-                    <button type="button" onClick={() => openPdf(x._id)}>
+                    <button
+                      type="button"
+                      onClick={() => downloadPdf(x._id, (x.receiptNo || "receipt") + ".pdf")}
+                    >
                       Download PDF
                     </button>
                   )}

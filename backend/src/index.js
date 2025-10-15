@@ -8,6 +8,8 @@ import { notFound, errorHandler } from "./middlewares/error.js";
 import specialRoutes from "./routes/special.routes.js";
 import recyclableRoutes from "./routes/recyclable.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.get("/", (req, res) => {
 app.use("/api/special-requests", specialRoutes);
 app.use("/api/recyclables", recyclableRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 
 // errors
