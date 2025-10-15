@@ -7,6 +7,7 @@ import {
 import { REQUEST_STATUS } from "../utils/constants.js";
 import { sendEmail } from "../utils/email.js";
 import { pushNotification } from "../utils/notify.js";
+import { getPaging, buildPaged } from "../utils/pagination.js";
 
 /** Capacity per day (simple conflict rule) */
 const MAX_PER_DAY = 20;
@@ -79,11 +80,14 @@ export const createSpecialRequest = async (req, res, next) => {
 /** List resident's special requests */
 export const listSpecialRequests = async (req, res, next) => {
   try {
-    const docs = await SpecialRequest.find({ resident: req.user._id }).sort({ createdAt: -1 });
-    return res.json({ data: docs });
-  } catch (e) {
-    return next(e);
-  }
+    const { page, limit, skip } = getPaging(req, { defaultLimit: 10, maxLimit: 100 });
+    const where = { resident: req.user._id };
+    const [items, total] = await Promise.all([
+      SpecialRequest.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      SpecialRequest.countDocuments(where),
+    ]);
+    return res.json(buildPaged({ items, total, page, limit }));
+  } catch (e) { return next(e); }
 };
 
 /** Update description/date or cancel (only while pending/scheduled) */

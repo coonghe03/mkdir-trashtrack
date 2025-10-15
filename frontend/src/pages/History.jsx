@@ -1,42 +1,43 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/api";
+import LoadingSpinner from "../components/LoadingSpinner";
+import EmptyState from "../components/EmptyState";
+import Pagination from "../components/Pagination";
 
-const formatDate = (d) => {
-  try { return new Date(d).toDateString(); } catch { return "-"; }
-};
+const formatDate = (d) => { try { return new Date(d).toDateString(); } catch { return "-"; } };
 
 const History = () => {
-  const [special, setSpecial] = useState([]);
-  const [recycles, setRecycles] = useState([]);
+  const [special, setSpecial] = useState({ data: [], meta: null });
+  const [recycles, setRecycles] = useState({ data: [], meta: null });
+  const [pageS, setPageS] = useState(1);
+  const [pageR, setPageR] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
 
-  const load = async () => {
+  const load = async (ps = pageS, pr = pageR) => {
+    setLoading(true);
     try {
       const [s, r] = await Promise.all([
-        api.get("/api/special-requests"),
-        api.get("/api/recyclables"),
+        api.get(`/api/special-requests?page=${ps}&limit=5`),
+        api.get(`/api/recyclables?page=${pr}&limit=5`),
       ]);
-      setSpecial(s.data || []);
-      setRecycles(r.data || []);
+      setSpecial({ data: s.data || [], meta: s.meta });
+      setRecycles({ data: r.data || [], meta: r.meta });
       setMsg("");
     } catch (e) {
       setMsg(e.message || "Failed to load history");
-      setSpecial([]);
-      setRecycles([]);
-    }
+      setSpecial({ data: [], meta: null });
+      setRecycles({ data: [], meta: null });
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(1, 1); /* eslint-disable-next-line */ }, []);
 
-  // ---- Special Requests actions ----
   const cancelSpecial = async (id) => {
     if (!window.confirm("Cancel this special request?")) return;
     setMsg("Canceling...");
-    try {
-      await api.post(`/api/special-requests/${id}/cancel`, {});
-      setMsg("Special request canceled.");
-      await load();
-    } catch (e) { setMsg(e.message); }
+    try { await api.post(`/api/special-requests/${id}/cancel`, {}); await load(pageS, pageR); setMsg("Special request canceled."); }
+    catch (e) { setMsg(e.message); }
   };
 
   const rescheduleSpecial = async (id) => {
@@ -48,20 +49,16 @@ const History = () => {
       const choice = avail.data?.[0];
       if (!choice) { setMsg("No available dates found."); return; }
       await api.patch(`/api/special-requests/${id}`, { preferredDate: choice });
+      await load(pageS, pageR);
       setMsg(`Rescheduled to ${choice}.`);
-      await load();
     } catch (e) { setMsg(e.message); }
   };
 
-  // ---- Recyclables actions ----
   const cancelRecycle = async (id) => {
     if (!window.confirm("Cancel this recyclable submission?")) return;
     setMsg("Canceling...");
-    try {
-      await api.patch(`/api/recyclables/${id}`, { status: "canceled" });
-      setMsg("Submission canceled.");
-      await load();
-    } catch (e) { setMsg(e.message); }
+    try { await api.patch(`/api/recyclables/${id}`, { status: "canceled" }); await load(pageS, pageR); setMsg("Submission canceled."); }
+    catch (e) { setMsg(e.message); }
   };
 
   const completeRecycle = async (id) => {
@@ -69,112 +66,140 @@ const History = () => {
     setMsg("Completing...");
     try {
       const r = await api.postNoBody(`/api/recyclables/${id}/complete`);
+      await load(pageS, pageR);
       setMsg(`${r.message} Receipt: ${r.data?.receipt?.receiptNo || "-"}`);
-      await load();
     } catch (e) { setMsg(e.message); }
   };
 
-  // NEW: Download PDF using Authorized fetch -> blob
   const downloadPdf = async (id, filename = "receipt.pdf") => {
     setMsg("Preparing receipt...");
     try {
-      const blob = await api.getBlob(`/api/recyclables/${id}/receipt.pdf`);
+      const token = localStorage.getItem("tt_token");
+      const base = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+      const res = await fetch(`${base}/api/recyclables/${id}/receipt.pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`PDF failed (${res.status})`);
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
+      const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
       setMsg("Receipt downloaded.");
-    } catch (e) {
-      setMsg(e.message);
-    }
+    } catch (e) { setMsg(e.message); }
   };
 
   return (
-    <>
+    <div className="container">
       <h1>History</h1>
-      {msg && <p style={{ color: "var(--muted)" }}>{msg}</p>}
+      {msg && <p className="alert">{msg}</p>}
+      {loading && (
+        <div className="row" style={{ justifyContent: "center" }}>
+          <div className="spinner" />
+          <span className="muted">Loading your history…</span>
+        </div>
+      )}
 
       {/* Special Requests */}
       <h3>Special Requests</h3>
-      {special.length === 0 ? (
-        <p>No special requests yet.</p>
+      {!loading && special.data.length === 0 ? (
+        <EmptyState title="No special requests yet" hint="Create one from the Special Request page." />
       ) : (
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {special.map((s) => (
-            <li key={s._id} className="card" style={{ padding: 12, marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <>
+          <ul className="list">
+            {special.data.map((s) => (
+              <li key={s._id} className="row">
                 <div style={{ flex: 1 }}>
-                  <strong style={{ textTransform: "capitalize" }}>{s.type}</strong>
-                  <div>Preferred: {formatDate(s.preferredDate)}</div>
-                  <div>Scheduled: {s.scheduledDate ? formatDate(s.scheduledDate) : "-"}</div>
-                  <div>Status: {s.status}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <strong style={{ textTransform:"capitalize" }}>{s.type}</strong>
+                    <span className="badge">{s.status}</span>
+                  </div>
+                  <div className="muted">Preferred: {formatDate(s.preferredDate)}</div>
+                  <div className="muted">Scheduled: {s.scheduledDate ? formatDate(s.scheduledDate) : "-"}</div>
 
                   {Array.isArray(s.alternatives) && s.alternatives.length > 0 && (
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                    <div className="helper" style={{ marginTop: 6 }}>
                       Alternatives: {s.alternatives.map((d) => formatDate(d)).join(", ")}
                     </div>
                   )}
 
-                  {s.conflictNote && (
-                    <div style={{ fontSize: 12, color: "var(--warning)", marginTop: 4 }}>
-                      Note: {s.conflictNote}
-                    </div>
-                  )}
+                  {s.conflictNote && <div className="error" style={{ marginTop: 6 }}>Note: {s.conflictNote}</div>}
                 </div>
 
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["pending", "scheduled"].includes(s.status) && (
-                    <>
-                      <button type="button" onClick={() => rescheduleSpecial(s._id)}>Reschedule</button>
-                      <button type="button" onClick={() => cancelSpecial(s._id)}>Cancel</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+                {["pending", "scheduled"].includes(s.status) && (
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button className="btn-ghost" onClick={() => rescheduleSpecial(s._id)}>Reschedule</button>
+                    <button className="btn-danger" onClick={() => cancelSpecial(s._id)}>Cancel</button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="pagination">
+            <span className="info">{special.meta?.page} / {special.meta?.pages || 1}</span>
+            <button
+              className="btn-ghost"
+              disabled={!special.meta?.hasPrev}
+              onClick={() => { const p = special.meta.page - 1; setPageS(p); load(p, pageR); }}
+            >Prev</button>
+            <button
+              className="btn-primary"
+              disabled={!special.meta?.hasNext}
+              onClick={() => { const p = special.meta.page + 1; setPageS(p); load(p, pageR); }}
+            >Next</button>
+          </div>
+        </>
       )}
 
       {/* Recyclable Submissions */}
       <h3>Recyclable Submissions</h3>
-      {recycles.length === 0 ? (
-        <p>No recyclable submissions yet.</p>
+      {!loading && recycles.data.length === 0 ? (
+        <EmptyState title="No recyclable submissions yet" hint="Submit recyclables to earn paybacks." />
       ) : (
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {recycles.map((x) => (
-            <li key={x._id} className="card" style={{ padding: 12, marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div>{x.items?.length || 0} items — Rs. {Number(x.totalPayback || 0).toFixed(2)}</div>
-                  <div> Status: {x.status}{x.receiptNo ? ` — ${x.receiptNo}` : ""}</div>
+        <>
+          <ul className="list">
+            {recycles.data.map((x) => (
+              <li key={x._id} className="row">
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <strong>{x.items?.length || 0} items</strong>
+                    <span className="badge">Rs. {Number(x.totalPayback || 0).toFixed(2)}</span>
+                    {x.receiptNo && <span className="badge">{x.receiptNo}</span>}
+                  </div>
+                  <div className="muted">Status: {x.status}</div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display:"flex", gap:8 }}>
                   {["submitted", "processing"].includes(x.status) && (
                     <>
-                      <button type="button" onClick={() => cancelRecycle(x._id)}>Cancel</button>
-                      <button type="button" onClick={() => completeRecycle(x._id)}>Complete</button>
+                      <button className="btn-ghost" onClick={() => cancelRecycle(x._id)}>Cancel</button>
+                      <button className="btn-primary" onClick={() => completeRecycle(x._id)}>Complete</button>
                     </>
                   )}
                   {x.status === "completed" && (
-                    <button
-                      type="button"
-                      onClick={() => downloadPdf(x._id, (x.receiptNo || "receipt") + ".pdf")}
-                    >
+                    <button className="btn-primary" onClick={() => downloadPdf(x._id, (x.receiptNo || "receipt") + ".pdf")}>
                       Download PDF
                     </button>
                   )}
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+          <div className="pagination">
+            <span className="info">{recycles.meta?.page} / {recycles.meta?.pages || 1}</span>
+            <button
+              className="btn-ghost"
+              disabled={!recycles.meta?.hasPrev}
+              onClick={() => { const p = recycles.meta.page - 1; setPageR(p); load(pageS, p); }}
+            >Prev</button>
+            <button
+              className="btn-primary"
+              disabled={!recycles.meta?.hasNext}
+              onClick={() => { const p = recycles.meta.page + 1; setPageR(p); load(pageS, p); }}
+            >Next</button>
+          </div>
+        </>
       )}
-    </>
+    </div>
   );
 };
-
 export default History;

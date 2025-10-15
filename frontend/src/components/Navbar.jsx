@@ -6,24 +6,27 @@ const Navbar = () => {
   const { user, logout } = useAuth() || {};
 
   return (
-    <header className="container" style={{ marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+    <header className="navbar">
+      <div className="navbar-inner">
         <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
-          <h2 style={{ margin: 0 }}>TrashTrack</h2>
+          <div className="brand">
+            <span className="brand-dot" />
+            <span>TrashTrack</span>
+            {user?.role && <span className="badge">{user.role}</span>}
+          </div>
         </Link>
 
-        <nav style={{ display: "flex", gap: 12, marginLeft: "auto" }}>
+        <nav className="nav">
           {user ? (
             <>
               <NavLink to="/" end>Dashboard</NavLink>
-              <NavLink to="/special">Special Request</NavLink>
+              <NavLink to="/special">Special</NavLink>
               <NavLink to="/recycle">Recyclables</NavLink>
               <NavLink to="/history">History</NavLink>
               <NavLink to="/rewards">Rewards</NavLink>
-              <NavLink to="/profile">Profile</NavLink>
               <NavLink to="/notifications">Notifications</NavLink>
               {user.role === "admin" && <NavLink to="/admin">Admin</NavLink>}
-              <button onClick={logout} style={{ marginLeft: 8 }}>Logout</button>
+              <button className="btn-ghost" onClick={logout}>Logout</button>
             </>
           ) : (
             <>

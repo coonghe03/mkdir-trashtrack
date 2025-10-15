@@ -10,6 +10,7 @@ import { sendEmail } from "../utils/email.js";
 import { buildRecyclableReceipt } from "../utils/receipt.js";
 import { pushNotification } from "../utils/notify.js";
 import { streamRecyclableReceiptPdf } from "../utils/pdf.js";
+import { getPaging, buildPaged } from "../utils/pagination.js";
 
 
 /**
@@ -40,11 +41,14 @@ export const createRecyclableSubmission = async (req, res, next) => {
 
 export const listRecyclableSubmissions = async (req, res, next) => {
   try {
-    const docs = await RecyclableSubmission.find({ resident: req.user._id }).sort({ createdAt: -1 });
-    return res.json({ data: docs });
-  } catch (e) {
-    return next(e);
-  }
+    const { page, limit, skip } = getPaging(req, { defaultLimit: 10, maxLimit: 100 });
+    const where = { resident: req.user._id };
+    const [items, total] = await Promise.all([
+      RecyclableSubmission.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      RecyclableSubmission.countDocuments(where),
+    ]);
+    return res.json(buildPaged({ items, total, page, limit }));
+  } catch (e) { return next(e); }
 };
 
 /**

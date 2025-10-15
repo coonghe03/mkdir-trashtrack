@@ -25,38 +25,49 @@ const SpecialRequestForm = () => {
     try {
       const res = await api.post("/api/special-requests", { type, description, preferredDate });
       setMsg(res.message || "Submitted");
-      setDescription("");
-      setPreferredDate("");
-    } catch (err) {
-      setMsg(err.message);
-    } finally { setLoading(false); }
+      setDescription(""); setPreferredDate("");
+    } catch (err) { setMsg(err.message); }
+    finally { setLoading(false); }
   };
 
   return (
-    <>
+    <div className="container">
       <h1>Special Waste Collection</h1>
-      <form onSubmit={submit} style={{ maxWidth: 520 }}>
-        <label>Type</label>
-        <select value={type} onChange={(e) => setType(e.target.value)} disabled={loading}>
-          <option value="bulky">Bulky</option>
-          <option value="ewaste">E-Waste</option>
-        </select>
-        {errors.type && <div style={{ color: "var(--danger)" }}>{errors.type}</div>}
+      {msg && <p className="alert">{msg}</p>}
 
-        <label>Preferred Date</label>
-        <input type="date" value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} disabled={loading} />
-        {errors.preferredDate && <div style={{ color: "var(--danger)" }}>{errors.preferredDate}</div>}
+      <form onSubmit={submit}>
+        <div className="grid-2">
+          <div>
+            <label>Type</label>
+            <select value={type} onChange={(e) => setType(e.target.value)} disabled={loading}>
+              <option value="bulky">Bulky</option>
+              <option value="ewaste">E-Waste</option>
+            </select>
+            {errors.type && <div className="error">{errors.type}</div>}
+          </div>
+
+          <div>
+            <label>Preferred Date</label>
+            <input type="date" value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} disabled={loading} />
+            {errors.preferredDate && <div className="error">{errors.preferredDate}</div>}
+          </div>
+        </div>
 
         <label>Description (optional)</label>
         <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} disabled={loading} />
-        {errors.description && <div style={{ color: "var(--danger)" }}>{errors.description}</div>}
+        {errors.description && <div className="error">{errors.description}</div>}
+        <div className="helper">Max 500 characters.</div>
 
-        <div style={{ marginTop: 12 }}>
-          <button type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</button>
+        <div style={{ marginTop: 16, display:"flex", gap:10 }}>
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? "Submitting…" : "Submit Request"}
+          </button>
+          <button type="button" className="btn-ghost" disabled={loading} onClick={()=>{ setDescription(""); setPreferredDate(""); }}>
+            Clear
+          </button>
         </div>
-        <p style={{ color: "var(--muted)" }}>{msg}</p>
       </form>
-    </>
+    </div>
   );
 };
 

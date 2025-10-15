@@ -1,6 +1,7 @@
 import SpecialRequest from "../models/SpecialRequest.js";
 import RecyclableSubmission from "../models/RecyclableSubmission.js";
 import Payback from "../models/Payback.js";
+import { getPaging, buildPaged } from "../utils/pagination.js";
 
 // simple max/day; keep in sync with special.controller.js
 const MAX_PER_DAY = 20;
@@ -16,6 +17,8 @@ const dayBounds = (iso) => {
 export const adminListSpecialRequests = async (req, res, next) => {
   try {
     const { status, type, dateFrom, dateTo, q } = req.query;
+    const { page, limit, skip } = getPaging(req, { defaultLimit: 15, maxLimit: 200 });
+
     const query = {};
     if (status) query.status = status;
     if (type) query.type = type;
@@ -24,21 +27,21 @@ export const adminListSpecialRequests = async (req, res, next) => {
       if (dateFrom) query.scheduledDate.$gte = new Date(dateFrom);
       if (dateTo)   query.scheduledDate.$lte = new Date(dateTo);
     }
-    // naive email match
+
     if (q) {
-      // join with user by email via aggregate (light)
       const users = await (await import("../models/User.js")).default.find({
         email: { $regex: q, $options: "i" }
       }).select("_id");
       query.resident = { $in: users.map(u => u._id) };
     }
 
-    const docs = await SpecialRequest.find(query)
-      .populate("resident", "name email")
-      .sort({ createdAt: -1 })
-      .limit(300);
+    const [items, total] = await Promise.all([
+      SpecialRequest.find(query).populate("resident", "name email")
+        .sort({ createdAt: -1 }).skip(skip).limit(limit),
+      SpecialRequest.countDocuments(query),
+    ]);
 
-    res.json({ data: docs });
+    res.json(buildPaged({ items, total, page, limit }));
   } catch (e) { next(e); }
 };
 
